@@ -8,6 +8,7 @@ import {
     FaUserShield,
     FaChartLine
 } from "react-icons/fa";
+import { Link } from "react-router-dom";
 
 import Navbar from "../components/navbar";
 import Footer from "../components/footer";
@@ -43,7 +44,7 @@ function Home() {
     ];
 
     return (
-        <div>
+        <div className="home-page">
 
             <Navbar />
 
@@ -74,20 +75,20 @@ function Home() {
 
                             <div className="hero-buttons">
 
-                                <a
-                                    href="/register"
+                                <Link
+                                    to="/register"
                                     className="btn btn-primary btn-lg"
                                 >
                                     Get Started
                                     <FaArrowRight />
-                                </a>
+                                </Link>
 
-                                <a
-                                    href="/login"
+                                <Link
+                                    to="/login"
                                     className="btn btn-outline-light btn-lg"
                                 >
                                     Login
-                                </a>
+                                </Link>
 
                             </div>
 
