@@ -95,6 +95,12 @@ All API responses are JSON. Protected endpoints require `Authorization: Bearer <
 
 See [server/README.md](server/README.md) for backend setup details and endpoint notes.
 
+## GitHub Pages Preview
+
+Pushing to `main` runs the workflow in `.github/workflows/deploy-pages.yml` and publishes the React client at `https://durga-prasad3.github.io/student-complaint-management/`. The client is configured for the repository subpath and client-side routes.
+
+This preview hosts only the frontend. GitHub Pages cannot run the PHP API or MySQL database, so API-backed authentication and shared complaint storage require a separate PHP/MySQL host. The current client uses its browser `localStorage` demo fallback when the API is unavailable.
+
 ## Project Layout
 
 ```text

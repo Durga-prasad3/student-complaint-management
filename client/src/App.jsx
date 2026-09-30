@@ -33,9 +33,12 @@ import StaffComplaints from "./pages/staff/StaffComplaints";
 import StaffNotifications from "./pages/staff/notifications";
 import StaffSettings from "./pages/staff/settings";
 import Analytics from "./pages/admin/Analytics";
+
+const appBasename = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+
 function App() {
     return (
-        <BrowserRouter>
+        <BrowserRouter basename={appBasename}>
 
             <Routes>
 
