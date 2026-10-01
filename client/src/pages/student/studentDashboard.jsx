@@ -8,43 +8,41 @@ import {
 } from "react-icons/fi";
 
 import StatusBadge from "../../components/statusBadge";
-import {
-    DEFAULT_COMPLAINTS,
-    getComplaints
-} from "../../utils/complaints";
+import { useAuth } from "../../context/AuthContext";
+import { subscribeComplaints } from "../../services/complaints";
 
 
 function StudentDashboard() {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [complaints, setComplaints] = useState([]);
 
     useEffect(() => {
-        setComplaints(getComplaints());
-    }, []);
+        if (!user) return undefined;
+        return subscribeComplaints(user, setComplaints, (error) => alert(error.message));
+    }, [user]);
 
-    const visibleComplaints = complaints.length ? complaints.slice(0, 4) : DEFAULT_COMPLAINTS.slice(0, 4);
+    const visibleComplaints = complaints.slice(0, 4);
 
     const statistics = [
         {
             title: "Total Complaints",
-            value: complaints.length
-                ? complaints.length
-                : DEFAULT_COMPLAINTS.length,
+            value: complaints.length,
             icon: <FiFileText />
         },
         {
             title: "Pending",
-            value: complaints.filter((item) => ["Submitted", "Under Review", "Assigned"].includes(item.status)).length || DEFAULT_COMPLAINTS.filter((item) => ["Submitted", "Under Review", "Assigned"].includes(item.status)).length,
+            value: complaints.filter((item) => ["Submitted", "Under Review", "Assigned"].includes(item.status)).length,
             icon: <FiClock />
         },
         {
             title: "In Progress",
-            value: complaints.filter((item) => item.status === "In Progress").length || DEFAULT_COMPLAINTS.filter((item) => item.status === "In Progress").length,
+            value: complaints.filter((item) => item.status === "In Progress").length,
             icon: <FiActivity />
         },
         {
             title: "Resolved",
-            value: complaints.filter((item) => item.status === "Resolved" || item.status === "Closed").length || DEFAULT_COMPLAINTS.filter((item) => item.status === "Resolved" || item.status === "Closed").length,
+            value: complaints.filter((item) => item.status === "Resolved" || item.status === "Closed").length,
             icon: <FiCheckCircle />
         }
     ];
@@ -102,7 +100,7 @@ function StudentDashboard() {
                         </p>
                     </div>
 
-                    <button className="view-all-button">
+                    <button className="view-all-button" onClick={() => navigate("/student/complaints")}>
                         View All
                     </button>
                 </div>
@@ -162,6 +160,10 @@ function StudentDashboard() {
 
                                 </tr>
                             ))}
+
+                            {visibleComplaints.length === 0 && (
+                                <tr><td colSpan="6">No complaints submitted yet.</td></tr>
+                            )}
 
                         </tbody>
 

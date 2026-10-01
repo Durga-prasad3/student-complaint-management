@@ -1,4 +1,5 @@
 
+import { useEffect, useState } from "react";
 import {
     BarChart,
     Bar,
@@ -21,199 +22,87 @@ import {
     FiClock,
     FiAlertTriangle
 } from "react-icons/fi";
+import { useAuth } from "../../context/AuthContext";
+import { subscribeComplaints } from "../../services/complaints";
 
 function Analytics() {
-    /*
-    ========================================
-    SUMMARY DATA
-    ========================================
-    */
+    const { user } = useAuth();
+    const [complaints, setComplaints] = useState([]);
 
+    useEffect(() => {
+        if (!user) return undefined;
+        return subscribeComplaints(user, setComplaints, (error) => alert(error.message));
+    }, [user]);
+
+    const now = new Date();
+    const dateOf = (value) => value?.toDate ? value.toDate() : new Date(value || 0);
+    const pendingCount = complaints.filter((item) => ["Submitted", "Under Review", "Assigned"].includes(item.status)).length;
+    const resolvedCount = complaints.filter((item) => ["Resolved", "Closed"].includes(item.status)).length;
     const summaryData = [
         {
             title: "Total Complaints",
-            value: 120,
+            value: complaints.length,
             icon: <FiFileText />,
             className: "analytics-blue"
         },
         {
             title: "Resolved",
-            value: 60,
+            value: resolvedCount,
             icon: <FiCheckCircle />,
             className: "analytics-green"
         },
         {
             title: "Pending",
-            value: 32,
+            value: pendingCount,
             icon: <FiClock />,
             className: "analytics-orange"
         },
         {
             title: "Critical",
-            value: 20,
+            value: complaints.filter((item) => item.priority === "Critical").length,
             icon: <FiAlertTriangle />,
             className: "analytics-red"
         }
     ];
 
-    /*
-    ========================================
-    MONTHLY COMPLAINT DATA
-    ========================================
-    */
+    const monthlyData = Array.from({ length: 6 }, (_, index) => {
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() - 4 + index, 1);
+        const monthComplaints = complaints.filter((item) => {
+            const createdAt = dateOf(item.createdAt);
+            return createdAt >= monthStart && createdAt < monthEnd;
+        });
+        const resolved = complaints.reduce((total, item) => total + (item.history || []).filter((event) => {
+            const changedAt = dateOf(event.createdAt);
+            return ["Resolved", "Closed"].includes(event.status)
+                && changedAt >= monthStart && changedAt < monthEnd;
+        }).length, 0);
+        return {
+            month: monthStart.toLocaleDateString("en", { month: "short" }),
+            complaints: monthComplaints.length,
+            resolved
+        };
+    });
 
-    const monthlyData = [
-        {
-            month: "Apr",
-            complaints: 12,
-            resolved: 8
-        },
-        {
-            month: "May",
-            complaints: 18,
-            resolved: 12
-        },
-        {
-            month: "Jun",
-            complaints: 24,
-            resolved: 17
-        },
-        {
-            month: "Jul",
-            complaints: 20,
-            resolved: 15
-        },
-        {
-            month: "Aug",
-            complaints: 26,
-            resolved: 21
-        },
-        {
-            month: "Sep",
-            complaints: 20,
-            resolved: 17
-        }
-    ];
+    const categoryData = Object.entries(complaints.reduce((counts, item) => {
+        counts[item.category] = (counts[item.category] || 0) + 1;
+        return counts;
+    }, {})).map(([category, count]) => ({ category, complaints: count }));
 
-    /*
-    ========================================
-    CATEGORY DATA
-    ========================================
-    */
+    const priorityData = ["Low", "Medium", "High", "Critical"].map((name) => ({
+        name,
+        value: complaints.filter((item) => item.priority === name).length
+    }));
 
-    const categoryData = [
-        {
-            category: "Wi-Fi",
-            complaints: 28
-        },
-        {
-            category: "Hostel",
-            complaints: 22
-        },
-        {
-            category: "Electrical",
-            complaints: 18
-        },
-        {
-            category: "Water",
-            complaints: 15
-        },
-        {
-            category: "Transport",
-            complaints: 12
-        },
-        {
-            category: "Other",
-            complaints: 10
-        }
-    ];
+    const departmentData = Object.entries(complaints.reduce((counts, item) => {
+        counts[item.department] = (counts[item.department] || 0) + 1;
+        return counts;
+    }, {})).map(([department, count]) => ({ department, complaints: count }));
 
-    /*
-    ========================================
-    PRIORITY DATA
-    ========================================
-    */
-
-    const priorityData = [
-        {
-            name: "Low",
-            value: 20
-        },
-        {
-            name: "Medium",
-            value: 35
-        },
-        {
-            name: "High",
-            value: 25
-        },
-        {
-            name: "Critical",
-            value: 20
-        }
-    ];
-
-    /*
-    ========================================
-    DEPARTMENT DATA
-    ========================================
-    */
-
-    const departmentData = [
-        {
-            department: "IT",
-            complaints: 35
-        },
-        {
-            department: "Hostel",
-            complaints: 25
-        },
-        {
-            department: "Electrical",
-            complaints: 20
-        },
-        {
-            department: "Civil",
-            complaints: 18
-        },
-        {
-            department: "Transport",
-            complaints: 12
-        }
-    ];
-
-    /*
-    ========================================
-    STATUS DATA
-    ========================================
-    */
-
-    const statusData = [
-        {
-            name: "Submitted",
-            value: 18
-        },
-        {
-            name: "Under Review",
-            value: 14
-        },
-        {
-            name: "Assigned",
-            value: 10
-        },
-        {
-            name: "In Progress",
-            value: 18
-        },
-        {
-            name: "Resolved",
-            value: 45
-        },
-        {
-            name: "Closed",
-            value: 15
-        }
-    ];
+    const statusData = ["Submitted", "Under Review", "Assigned", "In Progress", "Resolved", "Closed"].map((name) => ({
+        name,
+        value: complaints.filter((item) => item.status === name).length
+    }));
 
     /*
     ========================================
@@ -257,7 +146,7 @@ function Analytics() {
                 </div>
 
                 <div className="analytics-date">
-                    September 2026
+                    {now.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
                 </div>
 
             </div>

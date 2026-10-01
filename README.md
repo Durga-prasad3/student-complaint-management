@@ -1,125 +1,62 @@
 # SmartCampus Complaint Management
 
-SmartCampus is a role-based campus complaint management application. Students can report campus issues, while staff and administrators have separate dashboards for handling and reviewing complaints.
+SmartCampus is a role-based campus complaint application. Firebase Authentication manages accounts, Cloud Firestore stores profiles and complaint activity, and Cloud Storage stores optional complaint images.
 
-## Features
+## Firebase Setup
 
-- Student, staff, and administrator areas protected by role-based routes.
-- Student registration and login screens, dashboards, complaint history, notifications, and settings.
-- Staff complaint and dashboard screens.
-- Administrator complaint management, analytics, dashboard, notifications, and settings.
-- PHP JSON API for authentication and complaint operations, backed by MySQL.
-- Browser-based demo fallback for authentication and complaint data.
+1. Create a Firebase project and register a Web app.
+2. In Firebase Authentication, enable the Email/Password provider.
+3. Create a Cloud Firestore database and enable Cloud Storage.
+4. Copy `client/.env.example` to `client/.env.local` and fill in the Web app configuration from Firebase Project settings. These `VITE_` values are public client configuration; never put service-account credentials in the client.
+5. From the project root, deploy the security rules:
 
-> **Current integration status:** The client attempts to authenticate through the PHP API, then falls back to browser `localStorage` when the API is unavailable. Complaint submission and the client complaint lists currently use `localStorage`; they are not yet wired to the PHP complaint endpoints. Browser-stored demo data is local to that browser and is not shared with the MySQL database.
+```powershell
+npm install --global firebase-tools
+firebase login
+firebase use --add
+firebase deploy --only firestore:rules,storage --project YOUR_FIREBASE_PROJECT_ID
+```
 
-## Technology
+The deployment requires a Firebase project with Firestore and Storage enabled. `firebase.json` points the CLI to `firestore.rules` and `storage.rules`.
 
-- Client: React 19, Vite 8, React Router, Bootstrap, Recharts, and React Icons.
-- API: PHP with PDO.
-- Database: MySQL.
+## Create Trusted Accounts
 
-## Requirements
+Public registration creates student accounts only. To provision an administrator or staff member, create the account in Firebase Authentication, then create a Firestore document at `users/{AUTH_UID}` with these fields:
 
-- Node.js and npm.
-- PHP with the PDO MySQL extension.
-- MySQL. XAMPP can provide PHP, Apache, and MySQL on Windows.
+```json
+{
+  "name": "Staff Name",
+  "email": "staff@example.edu",
+  "phone": "",
+  "department": "IT",
+  "role": "staff"
+}
+```
+
+Use `admin` for the administrator role. Department values must match the complaint form: `IT`, `Electrical`, `Civil`, `Hostel`, `Transport`, `Administration`, or `Security`. Create the first admin profile using the Firebase Console; only a trusted console/admin operation should grant elevated roles. Staff receive complaints from their department, and administrators can assign complaints to registered staff in the same department.
 
 ## Run Locally
 
-### 1. Start the database and API
-
-Start MySQL (and Apache if using XAMPP), then import `server/schema.sql` into MySQL. The schema creates the `smart_campus` database and its tables.
-
-The default database configuration is `localhost`, database `smart_campus`, user `root`, and an empty password. Override it with `DB_HOST`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD` if needed.
-
-From the `student-compliant-management` directory, start PHP's built-in server:
-
 ```powershell
-php -S localhost:8000 -t server server/index.php
-```
-
-With XAMPP's PHP executable, for example:
-
-```powershell
-C:\xampp\php\php.exe -S localhost:8000 -t .\server .\server\index.php
-```
-
-The API health check is `http://localhost:8000/?path=health`. The API allows the Vite origin `http://localhost:5173` by default; configure `CORS_ORIGINS` as a comma-separated list to allow other origins.
-
-### 2. Start the client
-
-In a second terminal, from the `student-compliant-management/client` directory:
-
-```powershell
+cd client
 npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite, normally `http://localhost:5173`.
+Run `npm run lint` and `npm run build` from `client/` to validate the frontend. If Firebase settings are not configured, authentication and data operations show a configuration error rather than silently falling back to browser-only demo accounts.
 
-The client currently targets the API at `http://localhost:8000` in `src/context/AuthContext.jsx`.
+## Data and Access
 
-## Available Scripts
+- `users/{uid}` stores the user profile and role. New signups are always students; users cannot change their own role.
+- `complaints/{id}` stores complaint details and status history. Students can read their own complaints, staff can read their department, and admins can read all complaints.
+- `complaints/{id}/updates/{id}` stores comments and resolution feedback.
+- `complaint-images/{uid}/{complaintId}/...` stores optional PNG/JPEG uploads limited to 5 MB. Storage rules restrict access to the owner, department staff, and admins.
+- Role-based access is enforced by Firestore and Storage rules, not by hidden UI controls.
 
-Run these commands from `client/`:
+## GitHub Pages
 
-| Command | Description |
-| --- | --- |
-| `npm run dev` | Start the Vite development server. |
-| `npm run build` | Create a production build in `client/dist/`. |
-| `npm run preview` | Preview the production build locally. |
-| `npm run lint` | Run ESLint. |
+GitHub Pages serves only the React frontend; Firebase provides the application backend. Add these repository Actions variables under **Settings > Secrets and variables > Actions > Variables** so the Pages build can initialize Firebase:
 
-## Roles and Access
+`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, and `VITE_FIREBASE_APP_ID`.
 
-Public registration creates student accounts only. The API does not allow public users to grant themselves staff or administrator access. To create a trusted staff or administrator account for API-backed login, update that account's `role` in the MySQL `users` table.
-
-The client includes a local demo student account in its authentication context: `test@gmail.com` with password `123456`. This account is for local demonstration only; do not use these credentials for a deployed environment. Demo users and sessions are stored in browser `localStorage`.
-
-## API Overview
-
-All API responses are JSON. Protected endpoints require `Authorization: Bearer <token>`.
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `POST` | `/?path=auth&action=register` | Register a student account. |
-| `POST` | `/?path=auth&action=login` | Authenticate and return a bearer token. |
-| `GET` | `/?path=auth&action=me` | Get the authenticated user. |
-| `POST` | `/?path=auth&action=logout` | Revoke the current token. |
-| `GET` | `/?path=complaints` | List complaints visible to the authenticated role. Supports `status`, `priority`, `category`, `department`, and `search` filters. |
-| `POST` | `/?path=complaints` | Create a complaint; an optional PNG/JPEG image up to 5 MB is supported. |
-| `GET` | `/?path=complaints&id=123` | Get a complaint and its status history. |
-| `PATCH` | `/?path=complaints&id=123` | Update complaint status or priority; administrators can also update department and assignee. |
-| `GET` | `/?path=health` | Check that the API is running. |
-
-See [server/README.md](server/README.md) for backend setup details and endpoint notes.
-
-## GitHub Pages Preview
-
-Pushing to `main` runs the workflow in `.github/workflows/deploy-pages.yml` and publishes the React client at `https://durga-prasad3.github.io/student-complaint-management/`. The client is configured for the repository subpath and client-side routes.
-
-This preview hosts only the frontend. GitHub Pages cannot run the PHP API or MySQL database, so API-backed authentication and shared complaint storage require a separate PHP/MySQL host. The current client uses its browser `localStorage` demo fallback when the API is unavailable.
-
-## Project Layout
-
-```text
-student-compliant-management/
-├── client/                 # React and Vite application
-│   └── src/
-│       ├── components/     # Shared UI and route protection
-│       ├── context/        # Authentication and theme state
-│       ├── layouts/        # Student, staff, and admin layouts
-│       ├── pages/          # Public and role-specific screens
-│       └── utils/          # Client-side complaint demo storage
-└── server/                 # PHP API and MySQL schema
-    ├── config/
-    ├── controllers/
-    └── routes/
-```
-
-## Production Notes
-
-- Replace the local demo authentication and complaint storage with the intended API-backed flows before relying on shared or persistent application data.
-- Configure database credentials and allowed CORS origins for the deployment environment; do not expose development credentials.
-- The bundled demo credentials and browser `localStorage` are not suitable for production authentication or sensitive complaint data.
+The existing workflow runs lint and builds the client on pushes to `main`. Firebase Web configuration is public; security depends on the deployed rules and Authentication settings.

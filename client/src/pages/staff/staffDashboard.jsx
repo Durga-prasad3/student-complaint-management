@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     FaClipboardList,
@@ -9,54 +9,21 @@ import {
     FaSearch
 } from "react-icons/fa";
 import StatusBadge from "../../components/statusBadge";
+import { useAuth } from "../../context/AuthContext";
+import { subscribeComplaints, updateComplaint } from "../../services/complaints";
 
 function StaffDashboard() {
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     const [search, setSearch] = useState("");
 
-    const [complaints, setComplaints] = useState([
-        {
-            id: "CMP-1001",
-            title: "Wi-Fi not working in hostel",
-            category: "Wi-Fi / Internet",
-            location: "Hostel Block A",
-            priority: "High",
-            status: "In Progress",
-            date: "15 Sep 2026",
-            student: "Durga Prasad"
-        },
-        {
-            id: "CMP-1006",
-            title: "Projector not working",
-            category: "Electrical",
-            location: "Block B - Room 301",
-            priority: "Medium",
-            status: "Assigned",
-            date: "17 Sep 2026",
-            student: "Rahul"
-        },
-        {
-            id: "CMP-1007",
-            title: "Network issue in lab",
-            category: "Wi-Fi / Internet",
-            location: "CSE Lab 2",
-            priority: "Critical",
-            status: "In Progress",
-            date: "17 Sep 2026",
-            student: "Priya"
-        },
-        {
-            id: "CMP-1008",
-            title: "Computer not starting",
-            category: "Infrastructure",
-            location: "CSE Lab 1",
-            priority: "Medium",
-            status: "Resolved",
-            date: "16 Sep 2026",
-            student: "Arjun"
-        }
-    ]);
+    const [complaints, setComplaints] = useState([]);
+
+    useEffect(() => {
+        if (!user) return undefined;
+        return subscribeComplaints(user, setComplaints, (error) => alert(error.message));
+    }, [user]);
 
     const filteredComplaints = complaints.filter((complaint) => {
         return (
@@ -72,19 +39,14 @@ function StaffDashboard() {
         );
     });
 
-    const updateStatus = (id, status) => {
-        setComplaints((previousComplaints) =>
-            previousComplaints.map((complaint) => {
-                if (complaint.id === id) {
-                    return {
-                        ...complaint,
-                        status: status
-                    };
-                }
-
-                return complaint;
-            })
-        );
+    const updateStatus = async (id, status) => {
+        const complaint = complaints.find((item) => item.id === id);
+        if (!complaint) return;
+        try {
+            await updateComplaint(complaint, user, { status });
+        } catch (error) {
+            alert(error.message || "Could not update complaint.");
+        }
     };
 
     const totalComplaints = complaints.length;
@@ -285,7 +247,7 @@ function StaffDashboard() {
                                                 className="admin-view-btn"
                                                 onClick={() =>
                                                     navigate(
-                                                        `/student/complaints/${complaint.id}`
+                                                        `/staff/complaints/${complaint.firestoreId}`
                                                     )
                                                 }
                                             >

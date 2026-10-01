@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
@@ -14,80 +14,74 @@ import {
 } from "react-icons/fi";
 
 import StatusBadge from "../../components/statusBadge";
+import { useAuth } from "../../context/AuthContext";
+import {
+    addComplaintUpdate,
+    getComplaintImageUrl,
+    subscribeComplaint,
+    subscribeComplaintUpdates
+} from "../../services/complaints";
+
+function formatDateTime(value) {
+    const date = value?.toDate ? value.toDate() : new Date(value || Date.now());
+    return date.toLocaleString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
 
 function ComplaintDetails() {
     const navigate = useNavigate();
     const { id } = useParams();
+    const { user } = useAuth();
 
+    const [complaint, setComplaint] = useState(null);
+    const [loadedImage, setLoadedImage] = useState({ path: "", url: "" });
+    const [updates, setUpdates] = useState([]);
+    const [error, setError] = useState("");
     const [comment, setComment] = useState("");
 
     const [rating, setRating] = useState(0);
     const [feedback, setFeedback] = useState("");
-    const [submittedFeedback, setSubmittedFeedback] = useState(null);
+    const submittedFeedback = updates.find((item) => item.type === "feedback") || null;
+    const comments = updates.filter((item) => item.type !== "feedback");
+    const timeline = complaint?.history || [];
+    const imageUrl = loadedImage.path === complaint?.imagePath ? loadedImage.url : "";
+    const backPath = user?.role === "admin"
+        ? "/admin/complaints"
+        : user?.role === "staff" ? "/staff/complaints" : "/student/complaints";
 
-    const complaint = {
-        id: id || "CMP-1001",
-        title: "Wi-Fi not working in hostel",
-        description:
-            "The Wi-Fi connection has not been working properly in Hostel Block A for the last two days. Multiple students are unable to access the internet for academic work.",
-        category: "Wi-Fi / Internet",
-        location: "Hostel Block A - Room 204",
-        priority: "High",
-        department: "IT Department",
-        status: "In Progress",
-        date: "15 Sep 2026",
-        submittedBy: "Durga Prasad"
-    };
+    useEffect(() => {
+        if (!user || !id) return undefined;
+        const stopComplaint = subscribeComplaint(id, setComplaint, (loadError) => setError(loadError.message));
+        const stopUpdates = subscribeComplaintUpdates(id, setUpdates, (loadError) => setError(loadError.message));
+        return () => {
+            stopComplaint();
+            stopUpdates();
+        };
+    }, [id, user]);
 
-    const timeline = [
-        {
-            status: "Submitted",
-            date: "15 Sep 2026",
-            time: "09:30 AM",
-            description:
-                "Complaint submitted successfully by the student."
-        },
-        {
-            status: "Under Review",
-            date: "15 Sep 2026",
-            time: "11:15 AM",
-            description:
-                "Complaint has been reviewed by the administration."
-        },
-        {
-            status: "Assigned",
-            date: "15 Sep 2026",
-            time: "02:30 PM",
-            description:
-                "Complaint assigned to the IT Department."
-        },
-        {
-            status: "In Progress",
-            date: "16 Sep 2026",
-            time: "10:00 AM",
-            description:
-                "IT staff started working on the reported issue."
-        }
-    ];
+    useEffect(() => {
+        if (!complaint?.imagePath) return undefined;
 
-    const comments = [
-        {
-            name: "IT Support",
-            role: "Department Staff",
-            message:
-                "We have started checking the network connection in Block A.",
-            date: "16 Sep 2026, 10:15 AM"
-        },
-        {
-            name: "Durga Prasad",
-            role: "Student",
-            message:
-                "The problem is still occurring in Room 204.",
-            date: "16 Sep 2026, 02:40 PM"
-        }
-    ];
+        const imagePath = complaint.imagePath;
+        let active = true;
+        getComplaintImageUrl(imagePath)
+            .then((url) => {
+                if (active) setLoadedImage({ path: imagePath, url });
+            })
+            .catch((imageError) => {
+                if (active) setError(imageError.message);
+            });
+        return () => {
+            active = false;
+        };
+    }, [complaint?.imagePath]);
 
-    const handleComment = (e) => {
+    const handleComment = async (e) => {
         e.preventDefault();
 
         if (!comment.trim()) {
@@ -95,14 +89,15 @@ function ComplaintDetails() {
             return;
         }
 
-        console.log("New comment:", comment);
-
-        alert("Comment added!");
-
-        setComment("");
+        try {
+            await addComplaintUpdate(complaint, user, comment, { type: "comment" });
+            setComment("");
+        } catch (updateError) {
+            alert(updateError.message || "Could not add your comment.");
+        }
     };
 
-    const handleFeedback = (e) => {
+    const handleFeedback = async (e) => {
         e.preventDefault();
 
         if (rating === 0) {
@@ -115,18 +110,20 @@ function ComplaintDetails() {
             return;
         }
 
-        const feedbackData = {
-            rating,
-            feedback: feedback.trim()
-        };
-
-        setSubmittedFeedback(feedbackData);
-
-        setRating(0);
-        setFeedback("");
-
-        alert("Thank you for your feedback!");
+        try {
+            await addComplaintUpdate(complaint, user, feedback.trim(), {
+                type: "feedback",
+                rating
+            });
+            setRating(0);
+            setFeedback("");
+        } catch (updateError) {
+            alert(updateError.message || "Could not save your feedback.");
+        }
     };
+
+    if (error) return <p role="alert">{error}</p>;
+    if (!complaint) return <p>Loading complaint...</p>;
 
     return (
         <div className="complaint-details-page">
@@ -135,7 +132,7 @@ function ComplaintDetails() {
 
             <button
                 className="back-button"
-                onClick={() => navigate("/student/complaints")}
+                onClick={() => navigate(backPath)}
             >
                 <FiArrowLeft />
                 Back to My Complaints
@@ -195,6 +192,19 @@ function ComplaintDetails() {
                         </p>
 
                     </div>
+
+                    {imageUrl && (
+                        <div className="details-description">
+                            <h4>Attachment</h4>
+                            <a href={imageUrl} target="_blank" rel="noreferrer">
+                                <img
+                                    src={imageUrl}
+                                    alt={`Attachment for ${complaint.title}`}
+                                    style={{ maxWidth: "100%", maxHeight: 480, objectFit: "contain" }}
+                                />
+                            </a>
+                        </div>
+                    )}
 
 
                     <div className="details-info-grid">
@@ -308,7 +318,7 @@ function ComplaintDetails() {
                                 </small>
 
                                 <strong>
-                                    {complaint.submittedBy}
+                                    {complaint.student}
                                 </strong>
                             </div>
 
@@ -338,7 +348,7 @@ function ComplaintDetails() {
 
                             <div
                                 className="timeline-item"
-                                key={item.status}
+                                    key={`${item.status}-${index}`}
                             >
 
                                 <div className="timeline-marker">
@@ -363,17 +373,13 @@ function ComplaintDetails() {
                                         </strong>
 
                                         <span>
-                                            {item.date}
+                                            {formatDateTime(item.createdAt)}
                                         </span>
 
                                     </div>
 
-                                    <small>
-                                        {item.time}
-                                    </small>
-
                                     <p>
-                                        {item.description}
+                                        {item.note}
                                     </p>
 
                                 </div>
@@ -412,75 +418,16 @@ function ComplaintDetails() {
                 </div>
 
 
-                <div className="activity-item">
-
-                    <div className="activity-dot" />
-
-                    <div>
-
-                        <strong>
-                            IT Department started working
-                        </strong>
-
-                        <p>
-                            The assigned team has started
-                            investigating the Wi-Fi issue.
-                        </p>
-
-                        <small>
-                            16 Sep 2026 · 10:00 AM
-                        </small>
-
+                {[...timeline].reverse().map((item, index) => (
+                    <div className="activity-item" key={`${item.status}-${index}`}>
+                        <div className="activity-dot" />
+                        <div>
+                            <strong>{item.status}</strong>
+                            <p>{item.note}</p>
+                            <small>{formatDateTime(item.createdAt)}</small>
+                        </div>
                     </div>
-
-                </div>
-
-
-                <div className="activity-item">
-
-                    <div className="activity-dot" />
-
-                    <div>
-
-                        <strong>
-                            Complaint assigned
-                        </strong>
-
-                        <p>
-                            The complaint was assigned to
-                            the IT Department.
-                        </p>
-
-                        <small>
-                            15 Sep 2026 · 02:30 PM
-                        </small>
-
-                    </div>
-
-                </div>
-
-
-                <div className="activity-item">
-
-                    <div className="activity-dot" />
-
-                    <div>
-
-                        <strong>
-                            Complaint submitted
-                        </strong>
-
-                        <p>
-                            Complaint was submitted successfully.
-                        </p>
-
-                        <small>
-                            15 Sep 2026 · 09:30 AM
-                        </small>
-
-                    </div>
-
-                </div>
+                ))}
 
             </div>
 
@@ -510,15 +457,15 @@ function ComplaintDetails() {
 
                 <div className="comments-list">
 
-                    {comments.map((item, index) => (
+                    {comments.map((item) => (
 
                         <div
                             className="comment-item"
-                            key={index}
+                            key={item.id}
                         >
 
                             <div className="comment-avatar">
-                                {item.name.charAt(0)}
+                                {item.authorName.charAt(0)}
                             </div>
 
                             <div className="comment-body">
@@ -528,17 +475,17 @@ function ComplaintDetails() {
                                     <div>
 
                                         <strong>
-                                            {item.name}
+                                            {item.authorName}
                                         </strong>
 
                                         <span>
-                                            {item.role}
+                                            {item.authorRole}
                                         </span>
 
                                     </div>
 
                                     <small>
-                                        {item.date}
+                                        {formatDateTime(item.createdAt)}
                                     </small>
 
                                 </div>
@@ -585,7 +532,7 @@ function ComplaintDetails() {
 
             {/* FEEDBACK */}
 
-            {(complaint.status === "Resolved" ||
+            {user.role === "student" && (complaint.status === "Resolved" ||
                 complaint.status === "Closed") && (
 
                 <div className="details-card feedback-card">
@@ -717,7 +664,7 @@ function ComplaintDetails() {
                             </div>
 
                             <p className="submitted-comment">
-                                "{submittedFeedback.feedback}"
+                                "{submittedFeedback.message}"
                             </p>
 
                         </div>

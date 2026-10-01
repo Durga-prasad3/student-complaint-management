@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     BarChart,
     Bar,
@@ -26,112 +26,32 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import StatusBadge from "../../components/statusBadge";
+import { useAuth } from "../../context/AuthContext";
+import { subscribeComplaints } from "../../services/complaints";
 
 function AdminDashboard() {
     const navigate = useNavigate();
+    const { user } = useAuth();
+    const [complaints, setComplaints] = useState([]);
 
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState("");
     const [priority, setPriority] = useState("");
 
-    const complaints = [
-        {
-            id: "CMP-1001",
-            title: "Wi-Fi not working in hostel",
-            category: "Wi-Fi / Internet",
-            student: "Durga Prasad",
-            department: "IT Department",
-            priority: "High",
-            status: "In Progress",
-            date: "15 Sep 2026"
-        },
-        {
-            id: "CMP-1002",
-            title: "Water leakage in bathroom",
-            category: "Water Supply",
-            student: "Rahul Kumar",
-            department: "Civil / Infrastructure",
-            priority: "Critical",
-            status: "Submitted",
-            date: "12 Sep 2026"
-        },
-        {
-            id: "CMP-1003",
-            title: "Classroom fan not working",
-            category: "Electrical",
-            student: "Priya Sharma",
-            department: "Electrical",
-            priority: "Medium",
-            status: "Resolved",
-            date: "10 Sep 2026"
-        },
-        {
-            id: "CMP-1004",
-            title: "Cleaning required in hostel",
-            category: "Cleanliness",
-            student: "Arjun Reddy",
-            department: "Hostel",
-            priority: "Low",
-            status: "Under Review",
-            date: "08 Sep 2026"
-        },
-        {
-            id: "CMP-1005",
-            title: "Bus timing issue",
-            category: "Transport",
-            student: "Sai Kumar",
-            department: "Transport",
-            priority: "Medium",
-            status: "In Progress",
-            date: "05 Sep 2026"
-        }
-    ];
+    useEffect(() => {
+        if (!user) return undefined;
+        return subscribeComplaints(user, setComplaints, (error) => alert(error.message));
+    }, [user]);
 
-    const categoryData = [
-        {
-            name: "Wi-Fi",
-            complaints: 28
-        },
-        {
-            name: "Hostel",
-            complaints: 22
-        },
-        {
-            name: "Electrical",
-            complaints: 18
-        },
-        {
-            name: "Water",
-            complaints: 15
-        },
-        {
-            name: "Transport",
-            complaints: 12
-        },
-        {
-            name: "Other",
-            complaints: 10
-        }
-    ];
+    const categoryData = Object.entries(complaints.reduce((counts, complaint) => {
+        counts[complaint.category] = (counts[complaint.category] || 0) + 1;
+        return counts;
+    }, {})).map(([name, count]) => ({ name, complaints: count }));
 
-    const priorityData = [
-        {
-            name: "Low",
-            value: 20
-        },
-        {
-            name: "Medium",
-            value: 35
-        },
-        {
-            name: "High",
-            value: 25
-        },
-        {
-            name: "Critical",
-            value: 20
-        }
-    ];
+    const priorityData = ["Low", "Medium", "High", "Critical"].map((name) => ({
+        name,
+        value: complaints.filter((complaint) => complaint.priority === name).length
+    }));
 
     const filteredComplaints = complaints.filter((complaint) => {
         const matchesSearch =
@@ -195,7 +115,7 @@ function AdminDashboard() {
 
                     <div>
                         <p>Total Complaints</p>
-                        <h2>120</h2>
+                        <h2>{complaints.length}</h2>
                         <span className="stat-info">
                             All complaints
                         </span>
@@ -212,7 +132,7 @@ function AdminDashboard() {
 
                     <div>
                         <p>Pending</p>
-                        <h2>32</h2>
+                        <h2>{complaints.filter((item) => ["Submitted", "Under Review", "Assigned"].includes(item.status)).length}</h2>
                         <span className="stat-info">
                             Awaiting action
                         </span>
@@ -229,7 +149,7 @@ function AdminDashboard() {
 
                     <div>
                         <p>In Progress</p>
-                        <h2>28</h2>
+                        <h2>{complaints.filter((item) => item.status === "In Progress").length}</h2>
                         <span className="stat-info">
                             Currently working
                         </span>
@@ -246,7 +166,7 @@ function AdminDashboard() {
 
                     <div>
                         <p>Resolved</p>
-                        <h2>60</h2>
+                        <h2>{complaints.filter((item) => ["Resolved", "Closed"].includes(item.status)).length}</h2>
                         <span className="stat-info">
                             Successfully resolved
                         </span>
@@ -576,7 +496,7 @@ function AdminDashboard() {
                                                     className="admin-view-btn"
                                                     onClick={() =>
                                                         navigate(
-                                                            `/student/complaints/${complaint.id}`
+                                                            `/admin/complaints/${complaint.firestoreId}`
                                                         )
                                                     }
                                                 >

@@ -5,11 +5,13 @@ import {
     FiX,
     FiSend
 } from "react-icons/fi";
-import { addComplaint } from "../../utils/complaints";
+import { useAuth } from "../../context/AuthContext";
+import { createComplaint } from "../../services/complaints";
 
 function SubmitComplaint() {
 
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     const [form, setForm] = useState({
         title: "",
@@ -21,6 +23,7 @@ function SubmitComplaint() {
     });
 
     const [image, setImage] = useState(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleChange = (e) => {
         setForm({
@@ -42,7 +45,7 @@ function SubmitComplaint() {
         setImage(null);
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
 
         e.preventDefault();
 
@@ -58,31 +61,16 @@ function SubmitComplaint() {
             return;
         }
 
-        console.log("Complaint:", form);
-        console.log("Image:", image);
-
-        const newComplaint = {
-            id: `CMP-${Date.now().toString().slice(-5)}`,
-            title: form.title,
-            category: form.category,
-            location: form.location,
-            date: new Date().toLocaleDateString("en-GB", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric"
-            }),
-            priority: form.priority,
-            status: "Submitted",
-            description: form.description,
-            department: form.department,
-            submittedAt: new Date().toISOString()
-        };
-
-        addComplaint(newComplaint);
-
-        alert("Complaint submitted successfully!");
-
-        navigate("/student/complaints");
+        setIsSubmitting(true);
+        try {
+            await createComplaint(user, form, image);
+            alert("Complaint submitted successfully!");
+            navigate("/student/complaints");
+        } catch (error) {
+            alert(error.message || "Could not submit the complaint.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -391,10 +379,11 @@ function SubmitComplaint() {
                         <button
                             type="submit"
                             className="primary-button submit-button"
+                            disabled={isSubmitting}
                         >
                             <FiSend />
 
-                            Submit Complaint
+                            {isSubmitting ? "Submitting..." : "Submit Complaint"}
                         </button>
 
                     </div>

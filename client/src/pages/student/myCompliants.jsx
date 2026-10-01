@@ -9,18 +9,20 @@ import {
 } from "react-icons/fi";
 
 import StatusBadge from "../../components/statusBadge";
-import { DEFAULT_COMPLAINTS, getComplaints } from "../../utils/complaints";
+import { useAuth } from "../../context/AuthContext";
+import { subscribeComplaints } from "../../services/complaints";
 
 function MyComplaints() {
 
     const navigate = useNavigate();
+    const { user } = useAuth();
     const [complaints, setComplaints] = useState([]);
+    const [error, setError] = useState("");
 
     useEffect(() => {
-        setComplaints(getComplaints());
-    }, []);
-
-    const list = complaints.length ? complaints : DEFAULT_COMPLAINTS;
+        if (!user) return undefined;
+        return subscribeComplaints(user, setComplaints, (loadError) => setError(loadError.message));
+    }, [user]);
 
 
     const [search, setSearch] = useState("");
@@ -29,7 +31,7 @@ function MyComplaints() {
     const [status, setStatus] = useState("");
 
 
-    const filteredComplaints = list.filter((complaint) => {
+    const filteredComplaints = complaints.filter((complaint) => {
 
         const matchesSearch =
             complaint.title
@@ -231,6 +233,8 @@ function MyComplaints() {
 
             <div className="complaints-list-card">
 
+                {error && <p role="alert">{error}</p>}
+
                 <div className="list-header">
 
                     <div>
@@ -331,7 +335,7 @@ function MyComplaints() {
                                                     className="view-button"
                                                     onClick={() =>
                                                         navigate(
-                                                            `/student/complaints/${complaint.id}`
+                                                            `/student/complaints/${complaint.firestoreId}`
                                                         )
                                                     }
                                                 >

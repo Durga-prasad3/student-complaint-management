@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 import {
     FiBell,
     FiCheck,
@@ -9,58 +7,17 @@ import {
     FiCheckCircle,
     FiTrash2
 } from "react-icons/fi";
+import { useComplaintNotifications } from "../../hooks/useComplaintNotifications";
 
 
 function Notifications() {
-
-    const [notifications, setNotifications] = useState([
-        {
-            id: 1,
-            type: "complaint",
-            title: "New complaint submitted",
-            message:
-                "A new complaint CMP-1006 has been submitted by a student.",
-            date: "18 Sep 2026",
-            time: "09:30 AM",
-            read: false
-        },
-        {
-            id: 2,
-            type: "critical",
-            title: "Critical complaint received",
-            message:
-                "Complaint CMP-1002 has been marked as Critical.",
-            date: "12 Sep 2026",
-            time: "11:20 AM",
-            read: false
-        },
-        {
-            id: 3,
-            type: "assignment",
-            title: "Complaint assignment pending",
-            message:
-                "CMP-1002 has not been assigned to a staff member yet.",
-            date: "12 Sep 2026",
-            time: "12:00 PM",
-            read: true
-        },
-        {
-            id: 4,
-            type: "resolved",
-            title: "Complaint resolved",
-            message:
-                "CMP-1003 has been marked as resolved by Electrical Department.",
-            date: "10 Sep 2026",
-            time: "04:30 PM",
-            read: true
-        }
-    ]);
-
-
-    const unreadCount =
-        notifications.filter(
-            (notification) => !notification.read
-        ).length;
+    const {
+        notifications,
+        unreadCount,
+        markAsRead,
+        markAllAsRead,
+        deleteNotification
+    } = useComplaintNotifications();
 
 
     const getIcon = (type) => {
@@ -82,43 +39,6 @@ function Notifications() {
             default:
                 return <FiBell />;
         }
-    };
-
-
-    const markAsRead = (id) => {
-
-        setNotifications(
-            notifications.map((notification) =>
-                notification.id === id
-                    ? {
-                        ...notification,
-                        read: true
-                    }
-                    : notification
-            )
-        );
-    };
-
-
-    const markAllAsRead = () => {
-
-        setNotifications(
-            notifications.map((notification) => ({
-                ...notification,
-                read: true
-            }))
-        );
-    };
-
-
-    const deleteNotification = (id) => {
-
-        setNotifications(
-            notifications.filter(
-                (notification) =>
-                    notification.id !== id
-            )
-        );
     };
 
 

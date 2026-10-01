@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return signedIn() && userProfile().role == 'admin';
+    }
+
+    function isStaff() {
+      return signedIn() && userProfile().role == 'staff';
+    }
+
+    function canReadComplaint(data) {
+      return isAdmin()
+        || (signedIn() && data.createdBy == request.auth.uid)
+        || (isStaff() && data.department == userProfile().department);
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == 'student'
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.keys().hasOnly([
+          'name', 'email', 'phone', 'department', 'role', 'createdAt'
+        ]);
+
+      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+
+      allow update: if isAdmin()
+        || (signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['name', 'phone']));
+
+      allow delete: if isAdmin();
+    }
+
+    match /complaints/{complaintId} {
+      allow create: if signedIn()
+        && userProfile().role == 'student'
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == 'Submitted'
+        && request.resource.data.history.size() == 1
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 180
+        && request.resource.data.description is string
+        && request.resource.data.description.size() > 0
+        && request.resource.data.description.size() <= 10000
+        && request.resource.data.priority in ['Low', 'Medium', 'High', 'Critical']
+        && request.resource.data.department is string
+        && request.resource.data.department.size() > 0
+        && request.resource.data.keys().hasAll([
+          'code', 'createdBy', 'studentName', 'title', 'description', 'category',
+          'location', 'priority', 'status', 'department', 'assignedStaff',
+          'imagePath', 'createdAt', 'updatedAt', 'history'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'code', 'createdBy', 'studentName', 'title', 'description', 'category',
+          'location', 'priority', 'status', 'department', 'assignedStaff', 'assignedTo',
+          'imagePath', 'createdAt', 'updatedAt', 'history'
+        ]);
+
+      allow read: if canReadComplaint(resource.data);
+
+      allow update: if (isAdmin() || (isStaff()
+          && resource.data.department == userProfile().department))
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'priority', 'department', 'assignedStaff', 'assignedTo', 'history', 'updatedAt'
+        ])
+        && (isAdmin() || !request.resource.data.diff(resource.data)
+          .affectedKeys().hasAny(['department', 'assignedStaff', 'assignedTo']))
+        && (!('status' in request.resource.data)
+          || request.resource.data.status in [
+            'Submitted', 'Under Review', 'Assigned', 'In Progress', 'Resolved', 'Closed'
+          ])
+        && (!('priority' in request.resource.data)
+          || request.resource.data.priority in ['Low', 'Medium', 'High', 'Critical'])
+        && (request.resource.data.assignedTo == null
+          || (get(/databases/$(database)/documents/users/$(request.resource.data.assignedTo)).data.role == 'staff'
+            && get(/databases/$(database)/documents/users/$(request.resource.data.assignedTo)).data.department
+              == request.resource.data.department));
+
+      allow delete: if isAdmin();
+
+      match /updates/{updateId} {
+        function parentComplaint() {
+          return get(/databases/$(database)/documents/complaints/$(complaintId)).data;
+        }
+
+        allow read: if canReadComplaint(parentComplaint());
+
+        allow create: if canReadComplaint(parentComplaint())
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.authorName == userProfile().name
+          && request.resource.data.authorRole == userProfile().role
+          && request.resource.data.keys().hasAll([
+            'authorId', 'authorName', 'authorRole', 'message', 'createdAt'
+          ])
+          && request.resource.data.keys().hasOnly([
+            'authorId', 'authorName', 'authorRole', 'type', 'message', 'rating', 'createdAt'
+          ])
+          && request.resource.data.type in ['comment', 'feedback']
+          && request.resource.data.message is string
+          && request.resource.data.message.size() > 0
+          && ((request.resource.data.type == 'comment'
+              && !('rating' in request.resource.data))
+            || (request.resource.data.type == 'feedback'
+              && parentComplaint().createdBy == request.auth.uid
+              && parentComplaint().status in ['Resolved', 'Closed']
+              && request.resource.data.rating is int
+              && request.resource.data.rating >= 1
+              && request.resource.data.rating <= 5));
+
+        allow update, delete: if isAdmin();
+      }
+    }
+  }
+}

@@ -1,6 +1,5 @@
 
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
     FaSearch,
     FaEye,
@@ -8,72 +7,22 @@ import {
     FaCheckCircle
 } from "react-icons/fa";
 import StatusBadge from "../../components/statusBadge";
+import { useAuth } from "../../context/AuthContext";
+import { subscribeComplaints, updateComplaint } from "../../services/complaints";
 
 function StaffComplaints() {
-    const navigate = useNavigate();
-
+    const { user } = useAuth();
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
     const [priorityFilter, setPriorityFilter] = useState("");
 
-    const [complaints, setComplaints] = useState([
-        {
-            id: "CMP-1001",
-            title: "Wi-Fi not working in hostel",
-            description:
-                "The Wi-Fi connection is not working properly in Hostel Block A.",
-            category: "Wi-Fi / Internet",
-            location: "Hostel Block A",
-            priority: "High",
-            status: "In Progress",
-            date: "15 Sep 2026",
-            student: "Durga Prasad",
-            department: "IT Department",
-            assignedDate: "15 Sep 2026"
-        },
-        {
-            id: "CMP-1006",
-            title: "Projector not working",
-            description:
-                "The projector in the classroom is not displaying anything.",
-            category: "Electrical",
-            location: "Block B - Room 301",
-            priority: "Medium",
-            status: "Assigned",
-            date: "17 Sep 2026",
-            student: "Rahul",
-            department: "Electrical Department",
-            assignedDate: "17 Sep 2026"
-        },
-        {
-            id: "CMP-1007",
-            title: "Network issue in lab",
-            description:
-                "Internet connection is unstable in CSE Lab 2.",
-            category: "Wi-Fi / Internet",
-            location: "CSE Lab 2",
-            priority: "Critical",
-            status: "In Progress",
-            date: "17 Sep 2026",
-            student: "Priya",
-            department: "IT Department",
-            assignedDate: "17 Sep 2026"
-        },
-        {
-            id: "CMP-1008",
-            title: "Computer not starting",
-            description:
-                "One of the computers in the lab is not turning on.",
-            category: "Infrastructure",
-            location: "CSE Lab 1",
-            priority: "Medium",
-            status: "Resolved",
-            date: "16 Sep 2026",
-            student: "Arjun",
-            department: "IT Department",
-            assignedDate: "16 Sep 2026"
-        }
-    ]);
+    const [complaints, setComplaints] = useState([]);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+        if (!user) return undefined;
+        return subscribeComplaints(user, setComplaints, (loadError) => setError(loadError.message));
+    }, [user]);
 
     const [selectedComplaint, setSelectedComplaint] = useState(null);
     const [showModal, setShowModal] = useState(false);
@@ -115,47 +64,37 @@ function StaffComplaints() {
         setShowModal(false);
     };
 
-    const changeStatus = (id, newStatus) => {
-        setComplaints((previousComplaints) =>
-            previousComplaints.map((complaint) => {
-                if (complaint.id === id) {
-                    return {
-                        ...complaint,
-                        status: newStatus
-                    };
-                }
+    const changeStatus = async (id, newStatus, note = "Status updated") => {
+        const complaint = complaints.find((item) => item.id === id) || selectedComplaint;
+        if (!complaint) return;
 
-                return complaint;
-            })
-        );
-
-        if (selectedComplaint) {
-            setSelectedComplaint({
-                ...selectedComplaint,
-                status: newStatus
-            });
+        try {
+            await updateComplaint(complaint, user, { status: newStatus }, note);
+            setSelectedComplaint((current) => current?.id === id
+                ? { ...current, status: newStatus }
+                : current);
+        } catch (updateError) {
+            alert(updateError.message || "Could not update complaint.");
         }
     };
 
-    const addProgressUpdate = () => {
+    const addProgressUpdate = async () => {
         if (updateText.trim() === "") {
             alert("Please enter a progress update.");
             return;
         }
 
-        alert(
-            `Progress update added for ${selectedComplaint.id}:\n\n${updateText}`
-        );
-
-        setUpdateText("");
+        try {
+            await updateComplaint(selectedComplaint, user, {}, updateText);
+            setUpdateText("");
+            alert("Progress update saved.");
+        } catch (updateError) {
+            alert(updateError.message || "Could not save progress update.");
+        }
     };
 
-    const handleResolve = () => {
-        changeStatus(selectedComplaint.id, "Resolved");
-
-        alert(
-            `${selectedComplaint.id} has been marked as resolved.`
-        );
+    const handleResolve = async () => {
+        await changeStatus(selectedComplaint.id, "Resolved", "Complaint marked as resolved");
     };
 
     const clearFilters = () => {
@@ -184,6 +123,8 @@ function StaffComplaints() {
             </div>
 
             <div className="complaint-filter-card">
+
+                {error && <p role="alert">{error}</p>}
 
                 <div className="filter-search">
 

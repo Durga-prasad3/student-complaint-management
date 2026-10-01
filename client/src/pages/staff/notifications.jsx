@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 import {
     FiBell,
     FiCheck,
@@ -9,39 +7,16 @@ import {
     FiCheckCircle,
     FiTrash2
 } from "react-icons/fi";
+import { useComplaintNotifications } from "../../hooks/useComplaintNotifications";
 
 function StaffNotifications() {
-    const [notifications, setNotifications] = useState([
-        {
-            id: 1,
-            type: "complaint",
-            title: "New complaint assigned",
-            message: "Complaint CMP-1008 has been assigned to your team for review.",
-            date: "18 Sep 2026",
-            time: "09:30 AM",
-            read: false
-        },
-        {
-            id: 2,
-            type: "critical",
-            title: "Critical complaint received",
-            message: "Complaint CMP-1002 has been marked as Critical and needs urgent action.",
-            date: "12 Sep 2026",
-            time: "11:20 AM",
-            read: false
-        },
-        {
-            id: 3,
-            type: "assignment",
-            title: "Pending inspection",
-            message: "Please inspect CMP-1006 in Block B before the end of the day.",
-            date: "12 Sep 2026",
-            time: "12:00 PM",
-            read: true
-        }
-    ]);
-
-    const unreadCount = notifications.filter((notification) => !notification.read).length;
+    const {
+        notifications,
+        unreadCount,
+        markAsRead,
+        markAllAsRead,
+        deleteNotification
+    } = useComplaintNotifications();
 
     const getIcon = (type) => {
         switch (type) {
@@ -56,24 +31,6 @@ function StaffNotifications() {
             default:
                 return <FiBell />;
         }
-    };
-
-    const markAsRead = (id) => {
-        setNotifications((current) =>
-            current.map((notification) =>
-                notification.id === id ? { ...notification, read: true } : notification
-            )
-        );
-    };
-
-    const markAllAsRead = () => {
-        setNotifications((current) =>
-            current.map((notification) => ({ ...notification, read: true }))
-        );
-    };
-
-    const deleteNotification = (id) => {
-        setNotifications((current) => current.filter((notification) => notification.id !== id));
     };
 
     return (

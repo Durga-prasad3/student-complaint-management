@@ -40,9 +40,15 @@ jobs:
         run: npm ci
         working-directory: client
 
-      - name: Build client
-        run: npm run build
+      - name: Lint client
+        run: npm run lint
         working-directory: client
+
+      - name: Build client
+        run: node scripts/buildPages.js
+        working-directory: client
+        env:
+          FIREBASE_REPOSITORY_VARIABLES: ${{ toJSON(vars) }}
 
       - name: Support client-side routes
         run: cp client/dist/index.html client/dist/404.html

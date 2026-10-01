@@ -24,7 +24,7 @@ import Notifications from "./pages/student/notifications";
 import StudentSettings from "./pages/student/settings";
 
 import AdminDashboard from "./pages/admin/adminDashboard";
-import AdminComplaints from "./pages/admin/adminCompliants";
+import AdminComplaints from "./pages/admin/admincompliants";
 import AdminNotifications from "./pages/admin/notifications";
 import AdminSettings from "./pages/admin/settings";
 
@@ -136,6 +136,10 @@ function App() {
                             path="complaints"
                             element={<AdminComplaints />}
                         />
+                        <Route
+                            path="complaints/:id"
+                            element={<ComplaintDetails />}
+                        />
                          <Route
                         path="analytics"
                         element={<Analytics />}
@@ -175,6 +179,10 @@ function App() {
                         <Route
                             path="complaints"
                             element={<StaffComplaints />}
+                        />
+                        <Route
+                            path="complaints/:id"
+                            element={<ComplaintDetails />}
                         />
 
                         <Route

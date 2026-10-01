@@ -1,230 +1,148 @@
 
-import { createContext, useContext, useState } from "react";
-
-const API_BASE_URL = "http://localhost:8000";
-const STORAGE_KEYS = {
-    user: "smartCampusUser",
-    token: "smartCampusToken",
-    users: "smartCampusUsers"
-};
-
-const defaultUsers = [
-    {
-        id: 1,
-        name: "Durga Prasad",
-        email: "test@gmail.com",
-        password: "123456",
-        role: "student"
-    }
-];
-
-function readStoredUsers() {
-    try {
-        const storedUsers = localStorage.getItem(STORAGE_KEYS.users);
-
-        if (!storedUsers) {
-            localStorage.setItem(
-                STORAGE_KEYS.users,
-                JSON.stringify(defaultUsers)
-            );
-            return [...defaultUsers];
-        }
-
-        const parsed = JSON.parse(storedUsers);
-
-        return Array.isArray(parsed) && parsed.length
-            ? parsed
-            : [...defaultUsers];
-    } catch {
-        localStorage.setItem(
-            STORAGE_KEYS.users,
-            JSON.stringify(defaultUsers)
-        );
-        return [...defaultUsers];
-    }
-}
-
-function saveSession(userData, token = null) {
-    localStorage.setItem(
-        STORAGE_KEYS.user,
-        JSON.stringify(userData)
-    );
-
-    if (token) {
-        localStorage.setItem(STORAGE_KEYS.token, token);
-    } else {
-        localStorage.removeItem(STORAGE_KEYS.token);
-    }
-}
+import { createContext, useContext, useEffect, useState } from "react";
+import {
+    createUserWithEmailAndPassword,
+    deleteUser,
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    signOut,
+    updateProfile
+} from "firebase/auth";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { getFirebaseAuth, getFirebaseFirestore, isFirebaseConfigured } from "../services/firebase";
 
 const AuthContext = createContext();
 
+function authError(error) {
+    const messages = {
+        "auth/email-already-in-use": "Email already registered.",
+        "auth/invalid-credential": "Invalid email or password.",
+        "auth/invalid-email": "Enter a valid email address.",
+        "auth/network-request-failed": "Could not connect to Firebase. Check your connection and configuration.",
+        "auth/operation-not-allowed": "Email/password sign-in is not enabled in Firebase Authentication.",
+        "auth/weak-password": "Password must contain at least 6 characters."
+    };
+    return new Error(messages[error.code] || error.message || "Authentication failed.", { cause: error });
+}
+
+async function readProfile(firebaseUser) {
+    const profile = await getDoc(doc(getFirebaseFirestore(), "users", firebaseUser.uid));
+    if (!profile.exists()) {
+        throw new Error("Your account profile is missing. Contact an administrator.");
+    }
+
+    return { id: firebaseUser.uid, ...profile.data() };
+}
+
 function AuthProvider({ children }) {
-    const [user, setUser] = useState(() => {
-        const savedUser = localStorage.getItem(STORAGE_KEYS.user);
+    const [user, setUser] = useState(null);
+    const [ready, setReady] = useState(() => !isFirebaseConfigured());
 
-        return savedUser
-            ? JSON.parse(savedUser)
-            : null;
-    });
-
-    const login = async ({ email, password, role = "student" }) => {
-        const payload = {
-            email: String(email || "").trim(),
-            password: String(password || "").trim(),
-            role
-        };
-
-        if (!payload.email || !payload.password) {
-            throw new Error("Please enter email and password.");
+    useEffect(() => {
+        if (!isFirebaseConfigured()) {
+            return undefined;
         }
 
-        try {
-            const response = await fetch(
-                `${API_BASE_URL}/?path=auth&action=login`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify(payload)
+        let mounted = true;
+        const unsubscribe = onAuthStateChanged(getFirebaseAuth(), async (firebaseUser) => {
+            if (!firebaseUser) {
+                if (mounted) {
+                    setUser(null);
+                    setReady(true);
                 }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
-                throw new Error(data.message || "Invalid email or password.");
+                return;
             }
 
-            const userData = {
-                ...data.user,
-                role: data.user.role || role
-            };
+            try {
+                const profile = await readProfile(firebaseUser);
+                if (mounted) setUser(profile);
+            } catch {
+                // A newly created account may not have its profile written yet.
+            } finally {
+                if (mounted) setReady(true);
+            }
+        });
 
-            saveSession(userData, data.token || null);
+        return () => {
+            mounted = false;
+            unsubscribe();
+        };
+    }, []);
+
+    const login = async ({ email, password, role = "student" }) => {
+        try {
+            if (!isFirebaseConfigured()) {
+                throw new Error("Firebase is not configured. Set the VITE_FIREBASE_* values in client/.env.local.");
+            }
+
+            const credential = await signInWithEmailAndPassword(
+                getFirebaseAuth(),
+                String(email || "").trim(),
+                String(password || "")
+            );
+            let userData;
+            try {
+                userData = await readProfile(credential.user);
+            } catch (error) {
+                await signOut(getFirebaseAuth());
+                throw error;
+            }
+            if (userData.role !== role) {
+                await signOut(getFirebaseAuth());
+                throw new Error("This account does not have the selected role.");
+            }
+
             setUser(userData);
-
             return userData;
         } catch (error) {
-            const registeredUsers = readStoredUsers();
-            const matchingUser = registeredUsers.find(
-                (entry) =>
-                    entry.email.toLowerCase() === payload.email.toLowerCase() &&
-                    entry.password === payload.password
-            );
-
-            if (!matchingUser) {
-                throw new Error(
-                    error.message || "Invalid email or password."
-                );
-            }
-
-            const fallbackUser = {
-                ...matchingUser,
-                id: matchingUser.id || Date.now(),
-                role: matchingUser.role || role
-            };
-
-            saveSession(fallbackUser, `demo-${Date.now()}`);
-            setUser(fallbackUser);
-
-            return fallbackUser;
+            throw error.code ? authError(error) : error;
         }
     };
 
-    const register = async ({ name, email, password, role = "student" }) => {
-        const payload = {
-            name: String(name || "").trim(),
-            email: String(email || "").trim(),
-            password: String(password || "").trim(),
-            role
-        };
-
-        if (!payload.name || !payload.email || !payload.password) {
+    const register = async ({ name, email, password }) => {
+        if (!String(name || "").trim() || !String(email || "").trim() || !password) {
             throw new Error("Please fill in all required fields.");
         }
 
+        let credential;
         try {
-            const response = await fetch(
-                `${API_BASE_URL}/?path=auth&action=register`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify(payload)
-                }
-            );
-
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
-                throw new Error(data.message || "Registration failed.");
+            if (!isFirebaseConfigured()) {
+                throw new Error("Firebase is not configured. Set the VITE_FIREBASE_* values in client/.env.local.");
             }
 
-            const userData = {
-                ...data.user,
-                role: data.user.role || role
-            };
-
-            saveSession(userData, data.token || null);
-            setUser(userData);
-
-            return userData;
+            credential = await createUserWithEmailAndPassword(
+                getFirebaseAuth(),
+                String(email).trim(),
+                String(password)
+            );
+            try {
+                const cleanName = String(name).trim();
+                await updateProfile(credential.user, { displayName: cleanName });
+                const profile = {
+                    name: cleanName,
+                    email: credential.user.email,
+                    phone: "",
+                    department: "",
+                    role: "student",
+                    createdAt: serverTimestamp()
+                };
+                await setDoc(doc(getFirebaseFirestore(), "users", credential.user.uid), profile);
+                const userData = { id: credential.user.uid, ...profile };
+                setUser(userData);
+                return userData;
+            } catch (error) {
+                await deleteUser(credential.user).catch(() => {});
+                throw error;
+            }
         } catch (error) {
-            const registeredUsers = readStoredUsers();
-            const duplicateUser = registeredUsers.find(
-                (entry) =>
-                    entry.email.toLowerCase() === payload.email.toLowerCase()
-            );
-
-            if (duplicateUser) {
-                throw new Error("Email already registered.");
-            }
-
-            const fallbackUser = {
-                id: Date.now(),
-                name: payload.name,
-                email: payload.email,
-                password: payload.password,
-                phone: "",
-                department: "",
-                role: payload.role
-            };
-
-            const nextUsers = [...registeredUsers, fallbackUser];
-            localStorage.setItem(
-                STORAGE_KEYS.users,
-                JSON.stringify(nextUsers)
-            );
-
-            saveSession(fallbackUser, `demo-${Date.now()}`);
-            setUser(fallbackUser);
-
-            return fallbackUser;
+            throw error.code ? authError(error) : error;
         }
     };
 
     const logout = async () => {
-        const token = localStorage.getItem(STORAGE_KEYS.token);
-
-        if (token) {
-            try {
-                await fetch(`${API_BASE_URL}/?path=auth&action=logout`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`
-                    }
-                });
-            } catch {
-                // Ignore logout errors and clear local session anyway.
-            }
+        if (isFirebaseConfigured()) {
+            await signOut(getFirebaseAuth());
         }
-
-        localStorage.removeItem(STORAGE_KEYS.user);
-        localStorage.removeItem(STORAGE_KEYS.token);
         setUser(null);
     };
 
@@ -232,6 +150,7 @@ function AuthProvider({ children }) {
         <AuthContext.Provider
             value={{
                 user,
+                ready,
                 login,
                 register,
                 logout
@@ -242,6 +161,7 @@ function AuthProvider({ children }) {
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
     return useContext(AuthContext);
 }

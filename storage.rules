@@ -1,0 +1,30 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userProfile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    match /complaint-images/{ownerId}/{complaintId}/{fileName} {
+      function complaint() {
+        return firestore.get(/databases/(default)/documents/complaints/$(complaintId)).data;
+      }
+
+      allow write: if signedIn()
+        && request.auth.uid == ownerId
+        && request.resource != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png)');
+
+      allow read: if signedIn()
+        && (request.auth.uid == ownerId
+          || userProfile().role == 'admin'
+          || (userProfile().role == 'staff'
+            && userProfile().department == complaint().department));
+    }
+  }
+}

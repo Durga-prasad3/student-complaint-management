@@ -1,5 +1,6 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
     FiSearch,
@@ -10,73 +11,32 @@ import {
 } from "react-icons/fi";
 
 import StatusBadge from "../../components/statusBadge";
+import { useAuth } from "../../context/AuthContext";
+import {
+    subscribeComplaints,
+    subscribeStaffMembers,
+    updateComplaint
+} from "../../services/complaints";
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 function AdminComplaints() {
-    const [complaints, setComplaints] = useState([
-        {
-            id: "CMP-1001",
-            title: "Wi-Fi not working in hostel",
-            category: "Wi-Fi / Internet",
-            student: "Durga Prasad",
-            location: "Hostel Block A",
-            department: "IT Department",
-            staff: "Ravi Kumar",
-            priority: "High",
-            status: "In Progress",
-            date: "15 Sep 2026"
-        },
-        {
-            id: "CMP-1002",
-            title: "Water leakage in bathroom",
-            category: "Water Supply",
-            student: "Rahul Kumar",
-            location: "Hostel Block B",
-            department: "Civil / Infrastructure",
-            staff: "Not Assigned",
-            priority: "Critical",
-            status: "Submitted",
-            date: "12 Sep 2026"
-        },
-        {
-            id: "CMP-1003",
-            title: "Classroom fan not working",
-            category: "Electrical",
-            student: "Priya Sharma",
-            location: "Block C - Room 204",
-            department: "Electrical",
-            staff: "Suresh Kumar",
-            priority: "Medium",
-            status: "Resolved",
-            date: "10 Sep 2026"
-        },
-        {
-            id: "CMP-1004",
-            title: "Cleaning required in hostel",
-            category: "Cleanliness",
-            student: "Arjun Reddy",
-            location: "Hostel Block A",
-            department: "Hostel",
-            staff: "Ramesh",
-            priority: "Low",
-            status: "Under Review",
-            date: "08 Sep 2026"
-        },
-        {
-            id: "CMP-1005",
-            title: "Bus timing issue",
-            category: "Transport",
-            student: "Sai Kumar",
-            location: "Main Gate",
-            department: "Transport",
-            staff: "Vijay",
-            priority: "Medium",
-            status: "In Progress",
-            date: "05 Sep 2026"
-        }
-    ]);
+    const navigate = useNavigate();
+    const { user } = useAuth();
+    const [complaints, setComplaints] = useState([]);
+    const [staffMembers, setStaffMembers] = useState([]);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+        if (!user) return undefined;
+        return subscribeComplaints(user, setComplaints, (loadError) => setError(loadError.message));
+    }, [user]);
+
+    useEffect(() => {
+        if (!user) return undefined;
+        return subscribeStaffMembers(setStaffMembers, (loadError) => setError(loadError.message));
+    }, [user]);
 
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
@@ -348,7 +308,7 @@ function AdminComplaints() {
         );
 
         setNewStaff(
-            complaint.staff
+            complaint.assignedTo
         );
 
         setUpdateText("");
@@ -374,39 +334,23 @@ function AdminComplaints() {
     ========================================
     */
 
-    const saveChanges = () => {
+    const saveChanges = async () => {
         if (!selectedComplaint) {
             return;
         }
 
-        setComplaints(
-            (previousComplaints) =>
-                previousComplaints.map(
-                    (complaint) => {
-                        if (
-                            complaint.id ===
-                            selectedComplaint.id
-                        ) {
-                            return {
-                                ...complaint,
-                                status: newStatus,
-                                priority: newPriority,
-                                department:
-                                    newDepartment,
-                                staff: newStaff
-                            };
-                        }
-
-                        return complaint;
-                    }
-                )
-        );
-
-        alert(
-            "Complaint updated successfully!"
-        );
-
-        closeManage();
+        try {
+            await updateComplaint(selectedComplaint, user, {
+                status: newStatus,
+                priority: newPriority,
+                department: newDepartment,
+                assignedTo: newStaff || null,
+                assignedStaff: staffMembers.find((member) => member.id === newStaff)?.name || "Not Assigned"
+            }, updateText);
+            closeManage();
+        } catch (updateError) {
+            alert(updateError.message || "Could not update complaint.");
+        }
     };
 
     return (
@@ -593,7 +537,7 @@ function AdminComplaints() {
                             All Departments
                         </option>
 
-                        <option value="IT Department">
+                        <option value="IT">
                             IT Department
                         </option>
 
@@ -601,7 +545,7 @@ function AdminComplaints() {
                             Electrical
                         </option>
 
-                        <option value="Civil / Infrastructure">
+                        <option value="Civil">
                             Civil / Infrastructure
                         </option>
 
@@ -625,6 +569,8 @@ function AdminComplaints() {
             ======================================== */}
 
             <div className="admin-all-complaints-card">
+
+                {error && <p role="alert">{error}</p>}
 
                 {/* EXPORT BUTTONS */}
 
@@ -808,9 +754,7 @@ function AdminComplaints() {
                                                 <button
                                                     className="admin-view-btn"
                                                     onClick={() =>
-                                                        alert(
-                                                            `Viewing ${complaint.id}`
-                                                        )
+                                                        navigate(`/admin/complaints/${complaint.firestoreId}`)
                                                     }
                                                 >
                                                     <FiEye />
@@ -1009,14 +953,13 @@ function AdminComplaints() {
 
                                     <select
                                         value={newDepartment}
-                                        onChange={(e) =>
-                                            setNewDepartment(
-                                                e.target.value
-                                            )
-                                        }
+                                        onChange={(e) => {
+                                            setNewDepartment(e.target.value);
+                                            setNewStaff("");
+                                        }}
                                     >
 
-                                        <option value="IT Department">
+                                        <option value="IT">
                                             IT Department
                                         </option>
 
@@ -1024,7 +967,7 @@ function AdminComplaints() {
                                             Electrical
                                         </option>
 
-                                        <option value="Civil / Infrastructure">
+                                        <option value="Civil">
                                             Civil / Infrastructure
                                         </option>
 
@@ -1066,25 +1009,16 @@ function AdminComplaints() {
                                         }
                                     >
 
-                                        <option value="Not Assigned">
+                                        <option value="">
                                             Not Assigned
                                         </option>
-
-                                        <option value="Ravi Kumar">
-                                            Ravi Kumar
-                                        </option>
-
-                                        <option value="Suresh Kumar">
-                                            Suresh Kumar
-                                        </option>
-
-                                        <option value="Ramesh">
-                                            Ramesh
-                                        </option>
-
-                                        <option value="Vijay">
-                                            Vijay
-                                        </option>
+                                        {staffMembers
+                                            .filter((member) => member.department === newDepartment)
+                                            .map((member) => (
+                                                <option key={member.id} value={member.id}>
+                                                    {member.name}
+                                                </option>
+                                            ))}
 
                                     </select>
 
